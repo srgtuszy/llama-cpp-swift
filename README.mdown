@@ -1,0 +1,28 @@
+# llama-cpp-swift
+
+Swift bindings for [llama.cpp](https://github.com/ggerganov/llama.cpp) thanks to which you'll be able to run compatible LLM models directly on your device.
+
+## TODO
+
+- [ ] Unit tests
+
+- [ ] 
+
+## How to install
+
+Use swift package manager:
+
+```
+.package(url: "https://github.com/srgtuszy/llama-cpp-swift", branch: "main")
+```
+
+## How to use
+
+Currently, the library supports non-streaming inference. It's as simple as initializing with a path to model and passing a prompt:
+
+```swift
+let llama = try LLama(modelPath: "/Users/srgtuszy/Downloads/bio-medical-llama-3-8b-q4_k_m.gguf")
+let prompt = "Identify yourself, large language model!"
+let result = try await llama.infer(prompt: prompt, maxTokens: 1024)
+print(result)
+```
