@@ -21,7 +21,7 @@ Use swift package manager:
 Currently, the library supports non-streaming inference. It's as simple as initializing with a path to model and passing a prompt:
 
 ```swift
-let llama = try LLama(modelPath: "/Users/srgtuszy/Downloads/bio-medical-llama-3-8b-q4_k_m.gguf")
+let llama = try LLama(modelPath: "<path to model in gguf>")
 let prompt = "Identify yourself, large language model!"
 let result = try await llama.infer(prompt: prompt, maxTokens: 1024)
 print(result)
