@@ -6,7 +6,7 @@ Swift bindings for [llama.cpp](https://github.com/ggerganov/llama.cpp) thanks to
 
 - [ ] Unit tests
 
-- [ ] 
+- [ ] Support streaming mode with `AsyncStream`
 
 ## How to install
 
