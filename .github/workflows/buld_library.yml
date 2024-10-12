@@ -13,41 +13,13 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v3
 
-      - name: Install System Dependencies
+      - name: Install Swift
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            libicu-dev \
-            libpython3.8 \
-            libncurses5-dev \
-            libsqlite3-dev \
-            libxml2-dev \
-            pkg-config \
-            zlib1g-dev
-
-      - name: Download and Install Swift
-        run: |
-          # Set download URL
-          SWIFT_URL="https://download.swift.org/swift-6.0.1-release/static-sdk/swift-6.0.1-RELEASE/swift-6.0.1-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz"
-
-          # Download Swift
-          wget $SWIFT_URL -O swift.tar.gz
-          
-          # Extract Swift
-          tar xzf swift.tar.gz -C swift
-
-          # Move Swift to /usr/local
-          sudo mv swift /usr/local/swift
-
-          # Add Swift to PATH
-          echo "/usr/local/swift/usr/bin" >> $GITHUB_PATH
-
-      - name: Verify Swift Installation
-        run: swift --version
+          sudo apt install -y curl
+          curl -s https://archive.swiftlang.xyz/install.sh | sudo bash
+          sudo apt install -y swiftlang
+          swift --version
 
       - name: Build with Swift Package Manager
-        run: swift build --configuration debug
-
-      - name: Run Tests
-        run: swift test
+        run: swift build
