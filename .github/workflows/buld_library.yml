@@ -1,0 +1,22 @@
+name: Build Library
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Install Swift
+        uses: fwal/setup-swift@v1
+        with:
+          swift-version: '6.0'
+
+      - name: Build with Swift Package Manager
+        run: swift build
