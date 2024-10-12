@@ -1,5 +1,5 @@
-import OSLog
+import Logging
 
 extension Logger {
-  static var llama = Logger(subsystem: "llama-cpp-swift", category: "llama")
+  static var llama = Logger(label: "llama-cpp-swift")
 }

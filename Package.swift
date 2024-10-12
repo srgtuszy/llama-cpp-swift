@@ -16,13 +16,15 @@ let package = Package(
             targets: ["LLamaSwift"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/ggerganov/llama.cpp", branch: "master")
+        .package(url: "https://github.com/ggerganov/llama.cpp", branch: "master"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
         .target(
             name: "LLamaSwift",        
             dependencies: [
-                .product(name: "llama", package: "llama.cpp")
+                .product(name: "llama", package: "llama.cpp"),
+                .product(name: "Logging", package: "swift-log"),
             ]
         ),
         .testTarget(

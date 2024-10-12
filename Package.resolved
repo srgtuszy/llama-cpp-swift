@@ -1,5 +1,5 @@
 {
-  "originHash" : "46e8554f1cdd00bf8bf2a65ecab12e344c9846666dab2e7631a99fd5a2f53245",
+  "originHash" : "25ee71ff776d05e075094838b23f59770bd8bef3d3e294918ca825fbb7af85ab",
   "pins" : [
     {
       "identity" : "llama.cpp",
@@ -8,6 +8,15 @@
       "state" : {
         "branch" : "master",
         "revision" : "c81f3bbb051f8b736e117dfc78c99d7c4e0450f6"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "revision" : "9cb486020ebf03bfa5b5df985387a14a98744537",
+        "version" : "1.6.1"
       }
     }
   ],
