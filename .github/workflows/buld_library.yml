@@ -1,4 +1,4 @@
-name: Build Library
+name: Build Library using Swift Package Manager
 
 on:
   push:
@@ -6,17 +6,52 @@ on:
       - '**'
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v3
 
-      - name: Install Swift
-        uses: fwal/setup-swift@v1
-        with:
-          swift-version: '5.9.2'
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            libicu-dev \
+            libpython3.8 \
+            libncurses5-dev \
+            libsqlite3-dev \
+            libxml2-dev \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Download and Install Swift
+        run: |
+          # Define Swift version and platform
+          SWIFT_VERSION=6.0.1
+          PLATFORM=ubuntu22.04
+
+          # Set download URL
+          SWIFT_URL="https://download.swift.org/swift-$SWIFT_VERSION-release/$PLATFORM/swift-$SWIFT_VERSION-RELEASE-$PLATFORM.tar.gz"
+
+          # Download Swift
+          wget $SWIFT_URL -O swift.tar.gz
+
+          # Extract Swift
+          tar xzf swift.tar.gz
+
+          # Move Swift to /usr/local
+          sudo mv swift-$SWIFT_VERSION-RELEASE-$PLATFORM /usr/local/swift
+
+          # Add Swift to PATH
+          echo "/usr/local/swift/usr/bin" >> $GITHUB_PATH
+
+      - name: Verify Swift Installation
+        run: swift --version
 
       - name: Build with Swift Package Manager
-        run: swift build
+        run: swift build --configuration debug
+
+      - name: Run Tests
+        run: swift test
