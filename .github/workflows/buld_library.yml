@@ -33,12 +33,12 @@ jobs:
 
           # Download Swift
           wget $SWIFT_URL -O swift.tar.gz
-
+          
           # Extract Swift
-          tar xzf swift.tar.gz
+          tar xzf swift.tar.gz -C swift
 
           # Move Swift to /usr/local
-          sudo mv swift-$SWIFT_VERSION-RELEASE-$PLATFORM /usr/local/swift
+          sudo mv swift /usr/local/swift
 
           # Add Swift to PATH
           echo "/usr/local/swift/usr/bin" >> $GITHUB_PATH
