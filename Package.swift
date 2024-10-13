@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10.1
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -17,7 +17,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ggerganov/llama.cpp", branch: "master"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
     ],
     targets: [
         .target(

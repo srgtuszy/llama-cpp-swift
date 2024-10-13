@@ -2,7 +2,7 @@ import Foundation
 import Logging
 import llama
 
-public actor LLama {
+public class LLama {
   private let logger = Logger.llama
   private let model: OpaquePointer
   private let context: OpaquePointer
@@ -74,7 +74,7 @@ public actor LLama {
   // MARK: - Inference
 
   public func infer(prompt: String, maxTokens: Int32 = 128) async throws -> String {
-    completionInit(text: prompt)
+    try completionInit(text: prompt)
     var generatedText = ""
 
     while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
@@ -109,7 +109,7 @@ public actor LLama {
     batch.n_tokens += 1
   }
 
-  private func completionInit(text: String) {
+  private func completionInit(text: String) throws {
     logger.debug("Attempting to complete \"\(text)\"")
 
     tokensList = tokenize(text: text, add_bos: true)
@@ -121,7 +121,8 @@ public actor LLama {
     logger.debug("\nn_len = \(self.nLen), n_ctx = \(nCtx), n_kv_req = \(nKvReq)")
 
     if nKvReq > nCtx {
-      print("Error: n_kv_req > n_ctx, the required KV cache size is not big enough")
+      logger.error("Error: n_kv_req > n_ctx, the required KV cache size is not big enough")
+      throw InferError(message: "KV cache too small", code: .kvCacheFailure)
     }
 
     batch.clear()
@@ -134,7 +135,7 @@ public actor LLama {
     }
 
     if llama_decode(context, batch) != 0 {
-      print("llama_decode() failed")
+      throw InferError(message: "llama_decode failed", code: .decodingFailure)
     }
 
     nCur = batch.n_tokens
@@ -230,8 +231,8 @@ public actor LLama {
   }
 }
 
-private extension llama_batch {
-  mutating func clear() {
+extension llama_batch {
+  fileprivate mutating func clear() {
     n_tokens = 0
   }
 }
