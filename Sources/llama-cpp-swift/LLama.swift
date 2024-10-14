@@ -73,19 +73,20 @@ public class LLama {
 
   // MARK: - Inference
 
-  public func infer(prompt: String, maxTokens: Int32 = 128) async throws -> String {
+  public func infer(prompt: String, maxTokens: Int32 = 128) throws -> AsyncStream<String> {
     try completionInit(text: prompt)
-    var generatedText = ""
 
-    while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
-      guard !Task.isCancelled else {
-        throw InferError(message: "Task cancelled", code: .cancelled)
-      }
-      let newTokenStr = completionLoop()
-      generatedText += newTokenStr
+    return AsyncStream(String.self, bufferingPolicy: .unbounded) { continuation in
+        while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
+          guard !Task.isCancelled else {
+            continuation.finish()
+            return
+          }
+          let newTokenStr = completionLoop()
+          continuation.yield(newTokenStr)
+        }
+        continuation.finish()
     }
-
-    return generatedText
   }
 
   // MARK: - Private helpers
