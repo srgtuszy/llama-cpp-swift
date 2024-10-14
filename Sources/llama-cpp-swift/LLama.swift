@@ -7,8 +7,6 @@ public actor LLama {
   private let logger = Logger.llama
   private let model: Model
   private let sampling: UnsafeMutablePointer<llama_sampler>
-  private var tokensList: [llama_token]
-  private var temporaryInvalidCChars: [CChar]
 
   // MARK: - Init & Teardown
 
@@ -24,10 +22,6 @@ public actor LLama {
     llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(0.8))
     llama_sampler_chain_add(self.sampling, llama_sampler_init_softmax())
     llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(1234))
-
-    // Initialize token lists
-    self.tokensList = []
-    self.temporaryInvalidCChars = []
   }
 
   // MARK: - Inference
@@ -51,7 +45,7 @@ public actor LLama {
     }
   }
 
-  /// Performs the inference loop and yields generated tokens to the continuation.
+  /// Initiates the inference process and manages the lifecycle of variables.
   ///
   /// - Parameters:
   ///   - prompt: The input text prompt to generate completions for.
@@ -67,57 +61,53 @@ public actor LLama {
     var nCur: Int32 = 0
     var nDecode: Int32 = 0
     var batch = llama_batch_init(512, 0, 1)
+    var temporaryInvalidCChars: [CChar] = []
     defer {
       llama_batch_free(batch)
     }
 
-    do {
-      try self.completionInit(text: prompt, batch: &batch, nLen: nLen, nCur: &nCur)
-    } catch {
-      throw error
-    }
+    try self.initializeInference(
+      prompt: prompt,
+      batch: &batch,
+      nLen: nLen,
+      nCur: &nCur
+    )
 
-    while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
-      guard !Task.isCancelled else {
-        continuation.finish()
-        return
-      }
-      let newTokenStr = self.completionLoop(
-        batch: &batch,
-        isDone: &isDone,
-        nLen: nLen,
-        nCur: &nCur,
-        nDecode: &nDecode
-      )
-      continuation.yield(newTokenStr)
-    }
-    continuation.finish()
+    try await self.runInferenceLoop(
+      batch: &batch,
+      temporaryInvalidCChars: &temporaryInvalidCChars,
+      isDone: &isDone,
+      nLen: nLen,
+      nCur: &nCur,
+      nDecode: &nDecode,
+      maxTokens: maxTokens,
+      continuation: continuation
+    )
   }
 
   // MARK: - Private Helpers
 
-  /// Initializes the completion process by tokenizing the input text and preparing the batch.
+  /// Initializes the inference process by tokenizing the input and preparing the batch.
   ///
   /// - Parameters:
-  ///   - text: The input text to tokenize.
+  ///   - prompt: The input text prompt.
   ///   - batch: The batch to initialize.
-  ///   - nLen: The maximum length of the sequence.
+  ///   - nLen: The maximum sequence length.
   ///   - nCur: The current position in the sequence.
   ///
-  /// - Throws: An `InferError` if the KV cache is too small or decoding fails.
-  private func completionInit(
-    text: String,
+  /// - Throws: An `InferError` if the KV cache is insufficient or decoding fails.
+  private func initializeInference(
+    prompt: String,
     batch: inout llama_batch,
     nLen: Int32,
     nCur: inout Int32
   ) throws {
-    logger.debug("Attempting to complete \"\(text)\"")
+    logger.debug("Attempting to complete \"\(prompt)\"")
 
-    tokensList = tokenize(text: text, add_bos: true)
-    temporaryInvalidCChars = []
+    let tokensList = tokenize(text: prompt, add_bos: true)
 
     let nCtx = llama_n_ctx(model.context)
-    let nKvReq = tokensList.count + Int(nLen) - tokensList.count
+    let nKvReq = tokensList.count + Int(nLen - Int32(tokensList.count))
 
     logger.debug("\nn_len = \(nLen), n_ctx = \(nCtx), n_kv_req = \(nKvReq)")
 
@@ -142,18 +132,59 @@ public actor LLama {
     nCur = batch.n_tokens
   }
 
-  /// Performs a single iteration of the completion loop, generating the next token.
+  /// Runs the main inference loop, generating tokens and yielding them to the continuation.
   ///
   /// - Parameters:
-  ///   - batch: The batch to use for decoding.
-  ///   - isDone: A flag indicating whether the generation is complete.
-  ///   - nLen: The maximum length of the sequence.
+  ///   - batch: The batch used for decoding.
+  ///   - temporaryInvalidCChars: Buffer for building partial UTF8 strings.
+  ///   - isDone: A flag indicating whether inference is complete.
+  ///   - nLen: The maximum sequence length.
+  ///   - nCur: The current position in the sequence.
+  ///   - nDecode: The number of tokens decoded so far.
+  ///   - maxTokens: The maximum number of tokens to generate.
+  ///   - continuation: The stream continuation to yield tokens to.
+  private func runInferenceLoop(
+    batch: inout llama_batch,
+    temporaryInvalidCChars: inout [CChar],
+    isDone: inout Bool,
+    nLen: Int32,
+    nCur: inout Int32,
+    nDecode: inout Int32,
+    maxTokens: Int32,
+    continuation: AsyncThrowingStream<String, Error>.Continuation
+  ) async throws {
+    while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
+      guard !Task.isCancelled else {
+        continuation.finish()
+        return
+      }
+      let newTokenStr = self.generateNextToken(
+        batch: &batch,
+        temporaryInvalidCChars: &temporaryInvalidCChars,
+        isDone: &isDone,
+        nLen: nLen,
+        nCur: &nCur,
+        nDecode: &nDecode
+      )
+      continuation.yield(newTokenStr)
+    }
+    continuation.finish()
+  }
+
+  /// Generates the next token and updates necessary states.
+  ///
+  /// - Parameters:
+  ///   - batch: The batch used for decoding.
+  ///   - temporaryInvalidCChars: Buffer for building partial UTF8 strings.
+  ///   - isDone: A flag indicating whether inference is complete.
+  ///   - nLen: The maximum sequence length.
   ///   - nCur: The current position in the sequence.
   ///   - nDecode: The number of tokens decoded so far.
   ///
   /// - Returns: The newly generated token as a string.
-  private func completionLoop(
+  private func generateNextToken(
     batch: inout llama_batch,
+    temporaryInvalidCChars: inout [CChar],
     isDone: inout Bool,
     nLen: Int32,
     nCur: inout Int32,
