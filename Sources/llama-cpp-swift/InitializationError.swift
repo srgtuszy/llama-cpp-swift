@@ -1,8 +1,8 @@
-struct InitializationError: Error, Sendable {
-    let message: String
-    let code: Code
+public struct InitializationError: Error, Sendable {
+    public let message: String
+    public let code: Code
     
-    enum Code: Int, Sendable {
+    public enum Code: Int, Sendable {
         case failedToLoadModel = 1
         case failedToInitializeContext
     }

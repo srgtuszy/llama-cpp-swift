@@ -1,5 +1,5 @@
 {
-  "originHash" : "25ee71ff776d05e075094838b23f59770bd8bef3d3e294918ca825fbb7af85ab",
+  "originHash" : "d454c9dee5afd7c37e208aeedd7710ed675d10b2f95b176a818039d7f4783b92",
   "pins" : [
     {
       "identity" : "llama.cpp",
@@ -7,7 +7,7 @@
       "location" : "https://github.com/ggerganov/llama.cpp",
       "state" : {
         "branch" : "master",
-        "revision" : "c81f3bbb051f8b736e117dfc78c99d7c4e0450f6"
+        "revision" : "a89f75e1b7b90cb2d4d4c52ca53ef9e9b466aa45"
       }
     },
     {

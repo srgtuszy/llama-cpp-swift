@@ -4,10 +4,10 @@ import PackageDescription
 let package = Package(
     name: "LLamaSwift",
     platforms: [
-        .macOS(.v12), 
-        .iOS(.v12), 
-        .watchOS(.v10), 
-        .tvOS(.v17), 
+        .macOS(.v12),
+        .iOS(.v14),
+        .watchOS(.v4),
+        .tvOS(.v14),
         .visionOS(.v1)
     ],
     products: [
