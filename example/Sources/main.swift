@@ -1,7 +1,12 @@
 import Foundation
 import LLamaSwift
 
-let model = try Model(modelPath: "/Users/srgtuszy/Downloads/bio-medical-llama-3-8b-q4_k_m.gguf")
+guard let modelPath = ProcessInfo.processInfo.environment["MODEL_PATH"] else {
+    print("Error: MODEL_PATH environment variable not set.")
+    exit(1)
+}
+
+let model = try Model(modelPath: modelPath)
 let llama = LLama(model: model)
 let prompt = "what is the meaning of life?"
 
