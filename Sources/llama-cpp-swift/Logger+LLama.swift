@@ -1,7 +1,5 @@
 import Logging
 
 extension Logger {
-    static var llama: Logger {
-        Logger(label: "llama-cpp-swift")
-    }
+    static let llama = Logger(label: "llama-cpp-swift")
 }

@@ -3,139 +3,162 @@ import Logging
 @preconcurrency import llama
 
 public actor LLama {
-    private let logger = Logger.llama
-    private let modelLoader: Model
-    private let sampling: UnsafeMutablePointer<llama_sampler>
-    private var batch: llama_batch
-    private var tokensList: [llama_token]
-    private var temporaryInvalidCChars: [CChar]
-    private var isDone = false
+  private let logger = Logger.llama
+  private let model: Model
+  private let sampling: UnsafeMutablePointer<llama_sampler>
+  private var tokensList: [llama_token]
+  private var temporaryInvalidCChars: [CChar]
 
-    private var nLen: Int32 = 1024
-    private var nCur: Int32 = 0
-    private var nDecode: Int32 = 0
+  // MARK: - Init & teardown
 
-    // MARK: - Init & teardown
+  public init(model: Model) {
+    self.model = model
 
-    public init(modelLoader: Model) {
-        self.modelLoader = modelLoader
+    // Initialize sampling
+    let sparams = llama_sampler_chain_default_params()
+    self.sampling = llama_sampler_chain_init(sparams)
+    llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(0.8))
+    llama_sampler_chain_add(self.sampling, llama_sampler_init_softmax())
+    llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(1234))
 
-        // Initialize sampling
-        let sparams = llama_sampler_chain_default_params()
-        self.sampling = llama_sampler_chain_init(sparams)
-        llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(0.8))
-        llama_sampler_chain_add(self.sampling, llama_sampler_init_softmax())
-        llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(1234))
+    // Initialize token lists
+    self.tokensList = []
+    self.temporaryInvalidCChars = []
+  }
 
-        // Initialize batch and token list
-        self.batch = llama_batch_init(512, 0, 1)
-        self.tokensList = []
-        self.temporaryInvalidCChars = []
+  deinit {
+    // llama_sampler_free(sampling)
+  }
+
+  // MARK: - Inference
+
+  public func infer(prompt: String, maxTokens: Int32 = 128) -> AsyncThrowingStream<String, Error> {
+    return AsyncThrowingStream { continuation in
+      Task {
+        var isDone = false
+        let nLen: Int32 = 1024
+        var nCur: Int32 = 0
+        var nDecode: Int32 = 0
+        var batch = llama_batch_init(512, 0, 1)
+        defer {
+          llama_batch_free(batch)
+        }
+
+        do {
+          try self.completionInit(text: prompt, batch: &batch, nLen: nLen, nCur: &nCur)
+        } catch {
+          continuation.finish(throwing: error)
+          return
+        }
+
+        while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
+          guard !Task.isCancelled else {
+            continuation.finish()
+            return
+          }
+          let newTokenStr = self.completionLoop(
+            batch: &batch,
+            isDone: &isDone,
+            nLen: nLen,
+            nCur: &nCur,
+            nDecode: &nDecode
+          )
+          continuation.yield(newTokenStr)
+        }
+        continuation.finish()
+      }
+    }
+  }
+
+  // MARK: - Private helpers
+
+  private func completionInit(
+    text: String,
+    batch: inout llama_batch,
+    nLen: Int32,
+    nCur: inout Int32
+  ) throws {
+    logger.debug("Attempting to complete \"\(text)\"")
+
+    tokensList = tokenize(text: text, add_bos: true)
+    temporaryInvalidCChars = []
+
+    let nCtx = llama_n_ctx(model.context)
+    let nKvReq = tokensList.count + Int(nLen) - tokensList.count
+
+    logger.debug("\nn_len = \(nLen), n_ctx = \(nCtx), n_kv_req = \(nKvReq)")
+
+    if nKvReq > nCtx {
+      logger.error("Error: n_kv_req > n_ctx, the required KV cache size is not big enough")
+      throw InferError(message: "KV cache too small", code: .kvCacheFailure)
     }
 
-    deinit {
-        llama_batch_free(batch)
-        // llama_sampler_free(sampling)
+    batch.clear()
+
+    for (i, token) in tokensList.enumerated() {
+      llamaBatchAdd(&batch, token, Int32(i), [0], false)
+    }
+    if batch.n_tokens > 0 {
+      batch.logits[Int(batch.n_tokens) - 1] = 1  // true
     }
 
-    // MARK: - Inference
-
-    public func infer(prompt: String, maxTokens: Int32 = 128) -> AsyncThrowingStream<String, Error> {
-        return AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    try self.completionInit(text: prompt)
-                } catch {
-                    continuation.finish(throwing: error)
-                    return
-                }
-                while !self.isDone && self.nCur < self.nLen && self.nCur - self.batch.n_tokens < maxTokens {
-                    guard !Task.isCancelled else {
-                        continuation.finish()
-                        return
-                    }
-                    let newTokenStr = self.completionLoop()
-                    continuation.yield(newTokenStr)
-                }
-                continuation.finish()
-            }
-        }
+    if llama_decode(model.context, batch) != 0 {
+      throw InferError(message: "llama_decode failed", code: .decodingFailure)
     }
 
-    // MARK: - Private helpers
+    nCur = batch.n_tokens
+  }
 
-    private func completionInit(text: String) throws {
-        logger.debug("Attempting to complete \"\(text)\"")
+  private func completionLoop(
+    batch: inout llama_batch,
+    isDone: inout Bool,
+    nLen: Int32,
+    nCur: inout Int32,
+    nDecode: inout Int32
+  ) -> String {
+    var newTokenID: llama_token = 0
+    newTokenID = llama_sampler_sample(sampling, model.context, batch.n_tokens - 1)
 
-        tokensList = tokenize(text: text, add_bos: true)
-        temporaryInvalidCChars = []
-
-        let nCtx = llama_n_ctx(modelLoader.context)
-        let nKvReq = tokensList.count + Int(nLen) - tokensList.count
-
-        logger.debug("\nn_len = \(self.nLen), n_ctx = \(nCtx), n_kv_req = \(nKvReq)")
-
-        if nKvReq > nCtx {
-            logger.error("Error: n_kv_req > n_ctx, the required KV cache size is not big enough")
-            throw InferError(message: "KV cache too small", code: .kvCacheFailure)
-        }
-
-        batch.clear()
-
-        for (i, token) in tokensList.enumerated() {
-            llamaBatchAdd(&batch, token, Int32(i), [0], false)
-        }
-        if batch.n_tokens > 0 {
-            batch.logits[Int(batch.n_tokens) - 1] = 1  // true
-        }
-
-        if llama_decode(modelLoader.context, batch) != 0 {
-            throw InferError(message: "llama_decode failed", code: .decodingFailure)
-        }
-
-        nCur = batch.n_tokens
+    if llama_token_is_eog(model.model, newTokenID) || nCur == nLen {
+      isDone = true
+      let newTokenStr = String(
+        decoding: Data(temporaryInvalidCChars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
+      temporaryInvalidCChars.removeAll()
+      return newTokenStr
     }
 
-    private func completionLoop() -> String {
-        var newTokenID: llama_token = 0
-        newTokenID = llama_sampler_sample(sampling, modelLoader.context, batch.n_tokens - 1)
+    let newTokenCChars = tokenToPieceArray(token: newTokenID)
+    temporaryInvalidCChars.append(contentsOf: newTokenCChars)
+    let newTokenStr: String
 
-        if llama_token_is_eog(modelLoader.model, newTokenID) || nCur == nLen {
-            isDone = true
-            let newTokenStr = String(decoding: Data(temporaryInvalidCChars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
-            temporaryInvalidCChars.removeAll()
-            return newTokenStr
-        }
-
-        let newTokenCChars = tokenToPieceArray(token: newTokenID)
-        temporaryInvalidCChars.append(contentsOf: newTokenCChars)
-        let newTokenStr: String
-
-        if let string = String(validatingUTF8: temporaryInvalidCChars) {
-            temporaryInvalidCChars.removeAll()
-            newTokenStr = string
-        } else if let partialStr = attemptPartialString(from: temporaryInvalidCChars) {
-            temporaryInvalidCChars.removeAll()
-            newTokenStr = partialStr
-        } else {
-            newTokenStr = ""
-        }
-
-        batch.clear()
-        llamaBatchAdd(&batch, newTokenID, nCur, [0], true)
-
-        nDecode += 1
-        nCur += 1
-
-        if llama_decode(modelLoader.context, batch) != 0 {
-            logger.error("Failed to evaluate llama!")
-        }
-
-        return newTokenStr
+    if let string = String(validatingUTF8: temporaryInvalidCChars) {
+      temporaryInvalidCChars.removeAll()
+      newTokenStr = string
+    } else if let partialStr = attemptPartialString(from: temporaryInvalidCChars) {
+      temporaryInvalidCChars.removeAll()
+      newTokenStr = partialStr
+    } else {
+      newTokenStr = ""
     }
+
+    batch.clear()
+    llamaBatchAdd(&batch, newTokenID, nCur, [0], true)
+
+    nDecode += 1
+    nCur += 1
+
+    if llama_decode(model.context, batch) != 0 {
+      logger.error("Failed to evaluate llama!")
+    }
+
+    return newTokenStr
+  }
 
   private func llamaBatchAdd(
-    _ batch: inout llama_batch, _ id: llama_token, _ pos: llama_pos, _ seq_ids: [llama_seq_id],
+    _ batch: inout llama_batch,
+    _ id: llama_token,
+    _ pos: llama_pos,
+    _ seq_ids: [llama_seq_id],
     _ logits: Bool
   ) {
     batch.token[Int(batch.n_tokens)] = id
@@ -149,35 +172,33 @@ public actor LLama {
     batch.n_tokens += 1
   }
 
+  private func tokenize(text: String, add_bos: Bool) -> [llama_token] {
+    let utf8Data = text.utf8CString
+    let nTokens = Int32(utf8Data.count) + (add_bos ? 1 : 0)
+    let tokens = UnsafeMutablePointer<llama_token>.allocate(capacity: Int(nTokens))
+    defer { tokens.deallocate() }
 
-    private func tokenize(text: String, add_bos: Bool) -> [llama_token] {
-        let utf8Data = text.utf8CString
-        let nTokens = Int32(utf8Data.count) + (add_bos ? 1 : 0)
-        let tokens = UnsafeMutablePointer<llama_token>.allocate(capacity: Int(nTokens))
-        defer { tokens.deallocate() }
-
-        let tokenCount = llama_tokenize(
-            modelLoader.model, text, Int32(utf8Data.count), tokens, Int32(nTokens), add_bos, false)
-        guard tokenCount > 0 else {
-            return []
-        }
-
-        return Array(UnsafeBufferPointer(start: tokens, count: Int(tokenCount)))
+    let tokenCount = llama_tokenize(
+      model.model, text, Int32(utf8Data.count), tokens, Int32(nTokens), add_bos, false)
+    guard tokenCount > 0 else {
+      return []
     }
 
-    private func tokenToPieceArray(token: llama_token) -> [CChar] {
-        var buffer = [CChar](repeating: 0, count: 8)
-        var nTokens = llama_token_to_piece(modelLoader.model, token, &buffer, 8, 0, false)
+    return Array(UnsafeBufferPointer(start: tokens, count: Int(tokenCount)))
+  }
 
-        if nTokens < 0 {
-            let requiredSize = -nTokens
-            buffer = [CChar](repeating: 0, count: Int(requiredSize))
-            nTokens = llama_token_to_piece(modelLoader.model, token, &buffer, requiredSize, 0, false)
-        }
+  private func tokenToPieceArray(token: llama_token) -> [CChar] {
+    var buffer = [CChar](repeating: 0, count: 8)
+    var nTokens = llama_token_to_piece(model.model, token, &buffer, 8, 0, false)
 
-        return Array(buffer.prefix(Int(nTokens)))
+    if nTokens < 0 {
+      let requiredSize = -nTokens
+      buffer = [CChar](repeating: 0, count: Int(requiredSize))
+      nTokens = llama_token_to_piece(model.model, token, &buffer, requiredSize, 0, false)
     }
 
+    return Array(buffer.prefix(Int(nTokens)))
+  }
 
   private func attemptPartialString(from cchars: [CChar]) -> String? {
     for i in (1..<cchars.count).reversed() {
@@ -196,12 +217,12 @@ extension llama_batch {
   }
 }
 
-private extension String {
-    init?(validatingUTF8 cchars: [CChar]) {
-        if #available(macOS 15.0, *) {
-            self.init(validating: cchars.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-        } else {
-            self.init(cString: cchars)
-        }
+extension String {
+  fileprivate init?(validatingUTF8 cchars: [CChar]) {
+    if #available(macOS 15.0, *) {
+      self.init(validating: cchars.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    } else {
+      self.init(cString: cchars)
     }
+  }
 }
