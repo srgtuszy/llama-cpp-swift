@@ -102,13 +102,13 @@ public actor LLama {
 
         if llama_token_is_eog(modelLoader.model, newTokenID) || nCur == nLen {
             isDone = true
-            let newTokenStr = String(cString: temporaryInvalidCChars + [0])
+            let newTokenStr = String(decoding: Data(temporaryInvalidCChars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
             temporaryInvalidCChars.removeAll()
             return newTokenStr
         }
 
         let newTokenCChars = tokenToPieceArray(token: newTokenID)
-        temporaryInvalidCChars.append(contentsOf: newTokenCChars + [0])
+        temporaryInvalidCChars.append(contentsOf: newTokenCChars)
         let newTokenStr: String
 
         if let string = String(validatingUTF8: temporaryInvalidCChars) {
@@ -194,4 +194,14 @@ extension llama_batch {
   fileprivate mutating func clear() {
     n_tokens = 0
   }
+}
+
+private extension String {
+    init?(validatingUTF8 cchars: [CChar]) {
+        if #available(macOS 15.0, *) {
+            self.init(validating: cchars.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        } else {
+            self.init(cString: cchars)
+        }
+    }
 }
