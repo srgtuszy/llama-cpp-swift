@@ -1,8 +1,8 @@
 import Foundation
 import Logging
-import llama
+@preconcurrency import llama
 
-public class LLama {
+public actor LLama {
   private let logger = Logger.llama
   private let model: OpaquePointer
   private let context: OpaquePointer
@@ -64,22 +64,19 @@ public class LLama {
   }
 
   deinit {
-    llama_sampler_free(sampling)
     llama_batch_free(batch)
-    llama_free(context)
-    llama_free_model(model)
     llama_backend_free()
   }
 
   // MARK: - Inference
-
   public func infer(prompt: String, maxTokens: Int32 = 128) -> AsyncThrowingStream<String, Error> {
     return AsyncThrowingStream(String.self, bufferingPolicy: .unbounded) { continuation in
+      Task {
         do {
-            try completionInit(text: prompt)
+          try completionInit(text: prompt)
         } catch {
-            continuation.finish(throwing: error)
-            return
+          continuation.finish(throwing: error)
+          return
         }
         while !isDone && nCur < nLen && nCur - batch.n_tokens < maxTokens {
           guard !Task.isCancelled else {
@@ -90,6 +87,7 @@ public class LLama {
           continuation.yield(newTokenStr)
         }
         continuation.finish()
+      }
     }
   }
 
