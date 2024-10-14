@@ -322,8 +322,8 @@ extension String {
   ///
   /// - Parameter validatingUTF8: The array of CChars to initialize the string from.
   fileprivate init?(validatingUTF8 cchars: [CChar]) {
-    if #available(macOS 15.0, *) {
-      self.init(validating: cchars.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    if #available(macOS 15.0, iOS 18.0, *) {
+      self.init(validating: Data(cchars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
     } else {
       self.init(cString: cchars)
     }
