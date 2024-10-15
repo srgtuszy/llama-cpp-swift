@@ -1,0 +1,56 @@
+name: Build Library using Swift Package Manager
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+
+  build-and-test-linux:
+    name: Build and Test on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Install Swift
+        run: |
+          sudo apt-get update
+          sudo apt install -y curl
+          curl -s https://archive.swiftlang.xyz/install.sh | sudo bash
+          sudo apt install -y swiftlang
+          swift --version
+
+      - name: Build with Swift Package Manager
+        run: swift build
+
+  build-and-test-macos:
+    name: Build and Test on macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Build with Xcode
+        run: |
+          xcodebuild \
+          -scheme LLamaSwift \
+          -destination platform=macOS \
+          -derivedDataPath DerivedData \
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
+
+  build-and-test-ios:
+    name: Build and Test on iOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Build with Xcode
+        run: |
+          xcodebuild \
+          -scheme LLamaSwift \
+          -destination platform=iOS \
+          -derivedDataPath DerivedData \
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
