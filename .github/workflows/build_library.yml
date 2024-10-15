@@ -1,4 +1,4 @@
-name: Build Library using Swift Package Manager
+name: Build Library
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
 
 jobs:
 
-  build-and-test-linux:
-    name: Build and Test on Linux
+  build-linux:
+    name: Build on Linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
@@ -25,8 +25,8 @@ jobs:
       - name: Build with Swift Package Manager
         run: swift build
 
-  build-and-test-macos:
-    name: Build and Test on macOS
+  build-macos:
+    name: Build on macOS
     runs-on: macos-latest
     steps:
       - name: Checkout Source Code
@@ -40,8 +40,8 @@ jobs:
           -derivedDataPath DerivedData \
           SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
 
-  build-and-test-ios:
-    name: Build and Test on iOS
+  build-ios:
+    name: Build on iOS
     runs-on: macos-latest
     steps:
       - name: Checkout Source Code

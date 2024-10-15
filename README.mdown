@@ -13,6 +13,7 @@ Swift bindings for [llama.cpp](https://github.com/ggerganov/llama.cpp) thanks to
 ## TODO
 
 - [ ] Unit tests
+- [ ] Model downloads from URL and HuggingFace
 
 ## How to install
 
@@ -29,7 +30,7 @@ Here's a quick example on how to use it. For more, please refer to an example ap
 ```swift
 // Initialize model
 let model = try Model(modelPath: "<model path>")
-let llama = try LLama(modelLoader: model)
+let llama = try LLama(model: model)
 
 // Results are delivered through an `AsyncStream`
 let prompt = "what is the meaning of life?"

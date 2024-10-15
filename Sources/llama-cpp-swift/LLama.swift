@@ -1,6 +1,6 @@
 import Foundation
 import Logging
-@preconcurrency import llama
+import llama
 
 /// An actor that handles inference using the LLama language model.
 public actor LLama {
@@ -323,7 +323,7 @@ extension String {
   /// - Parameter validatingUTF8: The array of CChars to initialize the string from.
   fileprivate init?(validatingUTF8 cchars: [CChar]) {
     if #available(macOS 15.0, iOS 18.0, *) {
-      self.init(validating: Data(cchars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
+      self.init(decoding: Data(cchars.map { UInt8(bitPattern: $0) }), as: UTF8.self)
     } else {
       self.init(cString: cchars)
     }
