@@ -37,7 +37,6 @@ jobs:
           xcodebuild \
           -scheme LLamaSwift \
           -destination platform=macOS \
-          -derivedDataPath DerivedData-macos \
           SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
 
   build-ios:
@@ -52,5 +51,4 @@ jobs:
           xcodebuild \
           -scheme LLamaSwift \
           -destination platform=iOS \
-          -derivedDataPath DerivedData-ios \
           SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG
