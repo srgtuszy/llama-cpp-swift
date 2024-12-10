@@ -24,6 +24,10 @@ public actor LLama {
     llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(1234))
   }
 
+  deinit {
+    llama_sampler_free(self.sampling)
+  }
+
   // MARK: - Inference
 
   /// Generates an asynchronous stream of tokens as strings based on the given prompt.
